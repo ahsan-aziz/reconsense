@@ -89,6 +89,7 @@ RUN echo "auth requisite pam_deny.so" >> /etc/pam.d/su && \
     fix-permissions "${CONDA_DIR}"
 
 RUN echo "discovery ALL=(ALL) NOPASSWD:ALL" | sudo tee -a /etc/sudoers
+RUN chown ${NB_USER} /usr/local/bin/ -R && chmod u+rwx /usr/local/bin/ -R
 
 USER ${NB_UID}
 
