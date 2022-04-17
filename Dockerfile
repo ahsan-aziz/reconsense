@@ -89,7 +89,6 @@ RUN echo "auth requisite pam_deny.so" >> /etc/pam.d/su && \
     fix-permissions "${CONDA_DIR}"
 
 RUN echo "discovery ALL=(ALL) NOPASSWD:ALL" | sudo tee -a /etc/sudoers
-RUN chown ${NB_USER} /usr/local/bin/ -R && chmod u+rwx /usr/local/bin/ -R
 
 USER ${NB_UID}
 
@@ -281,6 +280,8 @@ RUN sed -re "s/c.ServerApp/c.NotebookApp/g" \
 HEALTHCHECK  --interval=15s --timeout=3s --start-period=5s --retries=3 \
     CMD wget -O- --no-verbose --tries=1 http://localhost:8888/api || exit 1
 
+#change ownership of scripts in bin directory
+RUN chown ${NB_USER} /usr/local/bin/ -R && chmod u+rwx /usr/local/bin/ -R
 # Switch back to discovery to avoid accidental container runs as root
 USER ${NB_UID}
 
