@@ -12,4 +12,4 @@ sudo docker build -t jupyter -f Dockerfile .
 sudo docker run -it --rm -p 8888:8888 -p 5001:5001 -e GRANT_SUDO=yes --user root jupyter:latest
 ```
 
-After running the docker find the URLs for Jupyter (port 8888) and Spiderfoot (port 500) to launch the services. 
+After running the docker find the URLs for Jupyter (port 8888) and Spiderfoot (port 5001) to launch the services. 
