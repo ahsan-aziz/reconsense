@@ -210,6 +210,7 @@ RUN go install github.com/projectdiscovery/httpx/cmd/httpx@latest
 RUN go install github.com/tomnomnom/anew@latest
 RUN go install github.com/OWASP/Amass/v3/...@master
 RUN go install github.com/projectdiscovery/chaos-client/cmd/chaos@latest
+RUN go install github.com/tomnomnom/waybackurls@latest
 
 #crobat with go get
 RUN sudo -S apt-get -y install git
@@ -231,6 +232,12 @@ RUN wget https://gitlab.com/api/v4/projects/33695681/packages/generic/nrich/late
 
 #subzy, subdomain takeover
 RUN go install -v github.com/lukasikic/subzy@latest
+
+#pymeta
+RUN sudo -S apt-get install exiftool -y
+RUN git clone https://github.com/m8r0wn/pymeta /home/${NB_USER}/pymeta
+RUN python3 /home/${NB_USER}/pymeta/setup.py install
+
 
 #Eyewitness screenshoting
 RUN pip3 install selenium
