@@ -236,7 +236,7 @@ RUN go install -v github.com/lukasikic/subzy@latest
 #pymeta
 RUN sudo -S apt-get install exiftool -y
 RUN git clone https://github.com/m8r0wn/pymeta /home/${NB_USER}/pymeta
-RUN python3 /home/${NB_USER}/pymeta/setup.py install
+RUN cd /home/${NB_USER}/pymeta/ && python3 setup.py install
 
 
 #Eyewitness screenshoting
