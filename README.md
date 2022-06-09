@@ -14,4 +14,4 @@ sudo docker run -it --rm -p 8888:8888 -p 5001:5001 -e GRANT_SUDO=yes --user root
 
 After running the docker find the URLs for Jupyter (port 8888) and Spiderfoot (port 5001) to launch the services. 
 
-Click on "recon.ipynb" file to see the preview of the jupyter notebook!
+Checkout "recon.ipynb" file to see the preview of the jupyter notebook!
