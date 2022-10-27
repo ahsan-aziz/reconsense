@@ -201,7 +201,7 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 
 
 #install projectdiscovery recon tools, amass and anew 
-RUN sudo -S apt-get update && sudo -S apt-get -y install nmap curl jq
+RUN sudo -S apt-get update && sudo -S apt-get -y install nmap curl jq gcc
 RUN mkdir ~/.config/ && mkdir ~/.config/subfinder
 COPY provider-config.yaml ~/.config/subfinder/
 RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
