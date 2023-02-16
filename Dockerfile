@@ -192,9 +192,9 @@ RUN touch /home/${NB_USER}/work/permutations.txt
 
 
 #install GO
-RUN wget https://go.dev/dl/go1.18.linux-amd64.tar.gz -O /home/${NB_USER}/go1.18.linux-amd64.tar.gz
-RUN sudo -S rm -rf /usr/local/go && sudo -S tar -C /usr/local -xvf /home/${NB_USER}/go1.18.linux-amd64.tar.gz
-RUN sudo -S rm /home/${NB_USER}/go1.18.linux-amd64.tar.gz
+RUN wget https://go.dev/dl/go1.19.linux-amd64.tar.gz -O /home/${NB_USER}/go1.19.linux-amd64.tar.gz
+RUN sudo -S rm -rf /usr/local/go && sudo -S tar -C /usr/local -xvf /home/${NB_USER}/go1.19.linux-amd64.tar.gz
+RUN sudo -S rm /home/${NB_USER}/go1.19.linux-amd64.tar.gz
 
 #update path with GO path
 ENV PATH="/usr/local/go/bin:${PATH}"
