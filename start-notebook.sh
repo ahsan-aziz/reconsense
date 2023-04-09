@@ -5,7 +5,7 @@
 set -e
 
 #start spiderfoot
-cd /home/discovery/spiderfoot-4.0/; pip3 install -r requirements.txt  && ./sf.py -l 0.0.0.0:5001 & 
+#cd /home/discovery/spiderfoot-4.0/; pip3 install -r requirements.txt  && ./sf.py -l 0.0.0.0:5001 & 
 cd /home/discovery/work/
 
 # The Jupyter command to launch
