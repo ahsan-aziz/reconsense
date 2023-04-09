@@ -92,7 +92,7 @@ RUN echo "discovery ALL=(ALL) NOPASSWD:ALL" | sudo tee -a /etc/sudoers
 
 USER ${NB_UID}
 
-ARG PYTHON_VERSION=default
+ARG PYTHON_VERSION=3.10
 
 # Setup work directory for backward-compatibility
 RUN mkdir "/home/${NB_USER}/work" && \
@@ -177,46 +177,69 @@ COPY start.sh start-notebook.sh start-singleuser.sh /usr/local/bin/
 # Currently need to have both jupyter_notebook_config and jupyter_server_config to support classic and lab
 COPY jupyter_server_config.py /etc/jupyter/
 
+#upgrade pip
+RUN pip3 install --upgrade pip
+
 #install spiderfoot
-RUN pip3 install CherryPy
+#RUN pip3 install CherryPy
 #RUN sudo -S apt-get update && sudo -S apt-get install python3-pip
-RUN wget https://github.com/smicallef/spiderfoot/archive/v4.0.tar.gz -O /home/${NB_USER}/v4.0.tar.gz
-RUN tar zxvf /home/${NB_USER}/v4.0.tar.gz -C /home/${NB_USER}/
-RUN pip3 install -r /home/${NB_USER}/spiderfoot-4.0/requirements.txt
+#RUN wget https://github.com/smicallef/spiderfoot/archive/v4.0.tar.gz -O /home/${NB_USER}/v4.0.tar.gz
+#RUN tar zxvf /home/${NB_USER}/v4.0.tar.gz -C /home/${NB_USER}/
+#RUN pip3 install -r /home/${NB_USER}/spiderfoot-4.0/requirements.txt
  
 # COPY jupyter recon notebook to the work folder
 COPY recon.ipynb /home/${NB_USER}/work/
+#COPY zip.py /home/${NB_USER}/
 
 #touch permutations, required by one of the cloud enum tools
 RUN touch /home/${NB_USER}/work/permutations.txt
 
 
 #install GO
-RUN wget https://go.dev/dl/go1.19.linux-amd64.tar.gz -O /home/${NB_USER}/go1.19.linux-amd64.tar.gz
-RUN sudo -S rm -rf /usr/local/go && sudo -S tar -C /usr/local -xvf /home/${NB_USER}/go1.19.linux-amd64.tar.gz
-RUN sudo -S rm /home/${NB_USER}/go1.19.linux-amd64.tar.gz
+RUN wget https://go.dev/dl/go1.20.linux-amd64.tar.gz -O /home/${NB_USER}/go1.20.linux-amd64.tar.gz
+RUN sudo -S rm -rf /usr/local/go && sudo -S tar -C /usr/local -xvf /home/${NB_USER}/go1.20.linux-amd64.tar.gz
+RUN sudo -S rm /home/${NB_USER}/go1.20.linux-amd64.tar.gz
 
 #update path with GO path
 ENV PATH="/usr/local/go/bin:${PATH}"
 
 
-#install projectdiscovery recon tools, amass and anew 
-RUN sudo -S apt-get update && sudo -S apt-get -y install nmap curl jq gcc
+#install projectdiscovery recon tools and amass 
+RUN sudo -S apt-get update && sudo -S apt-get -y install nmap curl jq gcc git
 RUN mkdir ~/.config/ && mkdir ~/.config/subfinder
 COPY provider-config.yaml ~/.config/subfinder/
 RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
 RUN go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
 RUN go install github.com/projectdiscovery/httpx/cmd/httpx@latest
-RUN go install github.com/tomnomnom/anew@latest
-RUN go install github.com/OWASP/Amass/v3/...@master
+RUN go install github.com/owasp-amass/amass/v3/...@master
 RUN go install github.com/projectdiscovery/chaos-client/cmd/chaos@latest
+
+
+#trufflehog
+RUN git clone https://github.com/trufflesecurity/trufflehog.git && cd trufflehog; go install
+RUN rm trufflehog -R
+
+#fff, gf, waybackurls  and anew from tomnomnom
+RUN go install github.com/tomnomnom/anew@latest
+RUN go install github.com/tomnomnom/gf@latest
+RUN go install github.com/tomnomnom/fff@latest
 RUN go install github.com/tomnomnom/waybackurls@latest
+# increase your open file descriptor limit before doing anything crazy (tomnomnom)
+RUN ulimit -n 16384
 
+#gf patterns
+RUN mkdir /home/${NB_USER}/.gf
+RUN git clone https://github.com/tomnomnom/gf.git && cd gf/examples && cp -r * /home/${NB_USER}/.gf/ && cd ../../ && rm gf -r 
+RUN git clone https://github.com/dwisiswant0/gf-secrets.git && cd gf-secrets/.gf && cp -r * /home/${NB_USER}/.gf/ && cd ../../ && rm gf-secrets -r
+
+#smuggler
+RUN git clone https://github.com/defparam/smuggler.git /home/${NB_USER}/smuggler
 #crobat with go get
-RUN sudo -S apt-get -y install git
-RUN go env -w GO111MODULE=auto
-RUN go get github.com/cgboal/sonarsearch/cmd/crobat
+#RUN sudo -S apt-get -y install git
+#RUN go env -w GO111MODULE=auto
+#RUN go get github.com/cgboal/sonarsearch/cmd/crobat
 
+RUN echo "Y" | sudo -S apt-get install zip
 #shuffledns
 RUN sudo -S apt-get install -y build-essential
 RUN git clone --depth=1 https://github.com/blechschmidt/massdns.git && cd massdns && sudo -S make && sudo -S make install && cd .. && sudo -S rm massdns -R
@@ -230,14 +253,35 @@ RUN wget https://gitlab.com/api/v4/projects/33695681/packages/generic/nrich/late
          sudo dpkg -i /home/${NB_USER}/nrich_latest_amd64.deb && \
          rm /home/${NB_USER}/nrich_latest_amd64.deb
 
-#subzy, subdomain takeover
-RUN go install -v github.com/lukasikic/subzy@latest
+#dnsreaper, subdomain takeover
+RUN git clone https://github.com/punk-security/dnsReaper.git /home/${NB_USER}/dnsReaper
+RUN cd /home/${NB_USER}/dnsReaper && pip3 install -r requirements.txt
+#RUN go install github.com/lukasikic/subzy@latest
 
 #pymeta
 RUN sudo -S apt-get install exiftool -y
-RUN git clone https://github.com/m8r0wn/pymeta /home/${NB_USER}/pymeta
-RUN cd /home/${NB_USER}/pymeta/ && python3 setup.py install
+RUN pip3 install pymetasec
+#RUN git clone https://github.com/m8r0wn/pymeta /home/${NB_USER}/pymeta
+#RUN cd /home/${NB_USER}/pymeta/ && python3 setup.py install
 
+#confused - dependency scanner
+RUN go install github.com/visma-prodsec/confused@latest
+
+#katana
+RUN go install github.com/projectdiscovery/katana/cmd/katana@latest
+
+#deduplicate
+RUN go install github.com/nytr0gen/deduplicate@latest
+
+
+#parth & uro
+RUN pip3 install parth
+RUN pip3 install uro
+ 
+RUN git clone https://github.com/s0md3v/XSStrike.git /home/${NB_USER}/XSStrike && pip3 install -r /home/${NB_USER}/XSStrike/requirements.txt
+
+#GXss
+RUN go install github.com/KathanP19/Gxss@latest
 
 #Eyewitness screenshoting
 RUN pip3 install selenium
@@ -246,17 +290,23 @@ RUN sudo -S ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
 ENV DEBIAN_FRONTEND=noninteractive 
 RUN git clone --depth 1 https://github.com/FortyNorthSecurity/EyeWitness.git /home/${NB_USER}/EyeWitness
 RUN sudo -S /home/${NB_USER}/EyeWitness/Python/setup/setup.sh
-RUN pip3 install netaddr  
+RUN pip3 install netaddr 
+ 
 #RUN wget https://kali.download/kali/pool/main/e/eyewitness/eyewitness-dbgsym_20201210.7-0kali1_amd64.deb -O /home/${NB_USER}/eyewitness-dbgsym_20201210.7-0kali1_amd64.deb
 #RUN sudo -S apt-get install -y gdebi-core && sudo -S gdebi /home/${NB_USER}/eyewitness-dbgsym_20201210.7-0kali1_amd64.deb && rm /home/${NB_USER}/eyewitness-dbgsym_20201210.7-0kali1_amd64.deb
 #RUN sudo -S apt-get update && sudo -S apt-get install -y eyewitness
 #RUN git clone https://github.com/FortyNorthSecurity/EyeWitness.git /home/${NB_USER}/EyeWitness/
 #RUN /home/${NB_USER}/EyeWitness/Python/setup/setup.sh
 
+#gowitness
+#RUN go install github.com/sensepost/gowitness@latest
+#RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+
 #ffuf
 RUN go install github.com/ffuf/ffuf@latest
 RUN wget https://github.com/assetnote/commonspeak2-wordlists/raw/master/subdomains/subdomains.txt -O /home/${NB_USER}/commonspeak2.txt
 RUN wget https://raw.githubusercontent.com/janmasarik/resolvers/master/resolvers.txt -O /home/${NB_USER}/resolvers.txt
+RUN wget https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/directory-list-lowercase-2.3-small.txt -O /home/${NB_USER}/small.txt
 
 #cloudenum tools
 RUN git clone https://github.com/RhinoSecurityLabs/GCPBucketBrute.git /home/${NB_USER}/GCPBucketBrute/ && pip3 install -r /home/${NB_USER}/GCPBucketBrute/requirements.txt
@@ -264,11 +314,16 @@ RUN git clone https://github.com/initstring/cloud_enum.git /home/${NB_USER}/clou
 
 #Email enumeration
 RUN git clone https://github.com/m8r0wn/crosslinked /home/${NB_USER}/crosslinked/ && pip3 install -r /home/${NB_USER}/crosslinked/requirements.txt
+RUN sed -i -e 's/linkedin.com/au.linkedin.com/g' /home/${NB_USER}/crosslinked/crosslinked/search.py
+#RUN echo Y |sudo -S apt-get install python3-requests
+#RUN echo Y |sudo -S apt-get install python3-bs4
+#RUN echo Y |sudo -S apt-get install python3-unidecode
+
 
 #zip and excel python packages
-RUN pip3 install XlsxWriter
-RUN pip3 install openpyxl
-RUN pip3 install pandas
+#RUN pip3 install XlsxWriter
+#RUN pip3 install openpyxl
+#RUN pip3 install pandas
                 
 
 ENV PATH="/home/discovery/go/bin:${PATH}"
