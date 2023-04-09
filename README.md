@@ -3,7 +3,7 @@ This is an effort to automate the external network reconnaissance part for penet
 
 To run:
 ```
-git clone https://github.com/spaceintotime/reconsense.git
+git clone https://github.com/ahsan-aziz/reconsense.git
 
 cd reconsense
 
