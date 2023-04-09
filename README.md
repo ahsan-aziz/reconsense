@@ -1,5 +1,5 @@
 # External Network Recon using Jupyter Notebook
-This is an effort to automate the external network reconnaissance part for penetration testing using Jupyter Notebook. A docker can be build using the Dockerfile which exposes a web service containing Jupyter Notebook. 
+This is an effort to automate the external network reconnaissance part for penetration testing using Jupyter Notebook. A docker can be build using the Dockerfile which exposes a web service containing the Jupyter Notebook. 
 
 To run:
 ```
