@@ -196,9 +196,14 @@ RUN touch /home/${NB_USER}/work/permutations.txt
 
 
 #install GO
-RUN wget "https://go.dev/dl/$(curl 'https://go.dev/VERSION?m=text'|grep go).linux-amd64.tar.gz" -O /home/${NB_USER}/go.tar.gz
-RUN sudo -S rm -rf /usr/local/go && sudo -S tar -C /usr/local -xvf /home/${NB_USER}/go.tar.gz
-RUN sudo -S rm /home/${NB_USER}/go.tar.gz
+#copying golang from their latest docker
+ 
+COPY --from=golang:latest /usr/local/go/ /usr/local/go/
+ 
+
+#RUN wget "https://go.dev/dl/$(curl 'https://go.dev/VERSION?m=text'|grep go).linux-amd64.tar.gz" -O /home/${NB_USER}/go.tar.gz
+#RUN sudo -S rm -rf /usr/local/go && sudo -S tar -C /usr/local -xvf /home/${NB_USER}/go.tar.gz
+#RUN sudo -S rm /home/${NB_USER}/go.tar.gz
 
 #update path with GO path
 ENV PATH="/usr/local/go/bin:${PATH}"
