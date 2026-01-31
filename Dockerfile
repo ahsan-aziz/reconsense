@@ -289,13 +289,13 @@ RUN git clone https://github.com/s0md3v/XSStrike.git /home/${NB_USER}/XSStrike &
 RUN go install github.com/KathanP19/Gxss@latest
 
 #Eyewitness screenshoting
-RUN pip3 install selenium
-RUN pip3 install fuzzywuzzy
-RUN sudo -S ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
-ENV DEBIAN_FRONTEND=noninteractive 
-RUN git clone --depth 1 https://github.com/FortyNorthSecurity/EyeWitness.git /home/${NB_USER}/EyeWitness
-RUN sudo -S /home/${NB_USER}/EyeWitness/Python/setup/setup.sh
-RUN pip3 install netaddr 
+#RUN pip3 install selenium
+#RUN pip3 install fuzzywuzzy
+#RUN sudo -S ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
+#ENV DEBIAN_FRONTEND=noninteractive 
+#RUN git clone --depth 1 https://github.com/FortyNorthSecurity/EyeWitness.git /home/${NB_USER}/EyeWitness
+#RUN sudo -S /home/${NB_USER}/EyeWitness/Python/setup/setup.sh
+#RUN pip3 install netaddr 
  
 #RUN wget https://kali.download/kali/pool/main/e/eyewitness/eyewitness-dbgsym_20201210.7-0kali1_amd64.deb -O /home/${NB_USER}/eyewitness-dbgsym_20201210.7-0kali1_amd64.deb
 #RUN sudo -S apt-get install -y gdebi-core && sudo -S gdebi /home/${NB_USER}/eyewitness-dbgsym_20201210.7-0kali1_amd64.deb && rm /home/${NB_USER}/eyewitness-dbgsym_20201210.7-0kali1_amd64.deb
