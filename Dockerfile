@@ -311,7 +311,7 @@ RUN go install github.com/KathanP19/Gxss@latest
 RUN go install github.com/ffuf/ffuf@latest
 RUN wget https://github.com/assetnote/commonspeak2-wordlists/raw/master/subdomains/subdomains.txt -O /home/${NB_USER}/commonspeak2.txt
 RUN wget https://raw.githubusercontent.com/janmasarik/resolvers/master/resolvers.txt -O /home/${NB_USER}/resolvers.txt
-RUN wget https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/directory-list-lowercase-2.3-small.txt -O /home/${NB_USER}/small.txt
+RUN wget https://raw.githubusercontent.com/danielmiessler/SecLists/refs/heads/master/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-small.txt -O /home/${NB_USER}/small.txt
 
 #cloudenum tools
 RUN git clone https://github.com/RhinoSecurityLabs/GCPBucketBrute.git /home/${NB_USER}/GCPBucketBrute/ && pip3 install -r /home/${NB_USER}/GCPBucketBrute/requirements.txt
